@@ -6,9 +6,19 @@
   "typings": "lib/index.d.ts",
   "files": [
     "lib",
+    "src",
     "readme.md"
   ],
   "license": "MIT",
+  "author": "yesmola63",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yesmola63/koishi-plugin-meting-music.git"
+  },
+  "homepage": "https://github.com/yesmola63/koishi-plugin-meting-music#readme",
+  "bugs": {
+    "url": "https://github.com/yesmola63/koishi-plugin-meting-music/issues"
+  },
   "scripts": {
     "build": "tsc -b",
     "watch": "tsc -b -w",
