@@ -1,0 +1,51 @@
+{
+  "name": "koishi-plugin-meting-music",
+  "version": "0.1.0-dev.0",
+  "description": "音乐点播插件：基于 Meting API 的点歌 / 搜索 / 歌词 / 封面",
+  "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "files": [
+    "lib",
+    "readme.md"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -b",
+    "watch": "tsc -b -w",
+    "typecheck": "tsc --noEmit",
+    "prepare": "tsc -b",
+    "test:smoke": "node scripts/smoke.cjs",
+    "test:e2e": "node scripts/e2e-command.cjs"
+  },
+  "keywords": [
+    "chatbot",
+    "koishi",
+    "plugin",
+    "music",
+    "meting",
+    "点歌"
+  ],
+  "peerDependencies": {
+    "koishi": "^4.18.0"
+  },
+  "devDependencies": {
+    "@koishijs/plugin-mock": "^2.6.6",
+    "@types/node": "^22.10.2",
+    "koishi": "^4.18.11",
+    "typescript": "^5.7.2"
+  },
+  "koishi": {
+    "description": {
+      "zh": "音乐点播：通过 Meting API 点歌、搜索歌曲、查看歌词与封面",
+      "en": "Music request via Meting API"
+    },
+    "service": {
+      "required": [
+        "http"
+      ],
+      "implements": [
+        "meting"
+      ]
+    }
+  }
+}
