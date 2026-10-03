@@ -13,7 +13,6 @@
     "build": "tsc -b",
     "watch": "tsc -b -w",
     "typecheck": "tsc --noEmit",
-    "prepare": "tsc -b",
     "test:smoke": "node scripts/smoke.cjs",
     "test:e2e": "node scripts/e2e-command.cjs"
   },

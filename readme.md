@@ -23,9 +23,14 @@
 
 ## 安装
 
+本仓库已包含编译产物 `lib/`，可以直接从 GitHub 安装，不需要本地构建：
+
 ```bash
-npm i koishi-plugin-meting-music
+npm i github:yesmola63/koishi-plugin-meting-music
 ```
+
+> 仓库里提交了 `lib/` 是为了让 git 安装开箱即用（避免安装时执行构建脚本）。
+> 改动 `src/` 后请执行 `npm run build` 再提交，否则 `lib/` 会与源码不一致。
 
 在 `koishi.yml` 里启用（`http` 服务是本插件的硬依赖，标准 Koishi 模板自带）：
 

@@ -1,5 +1,4 @@
 node_modules
-lib
 *.tsbuildinfo
 .npm-cache
 .DS_Store
