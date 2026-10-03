@@ -29,6 +29,13 @@
 npm i github:yesmola63/koishi-plugin-meting-music
 ```
 
+如果 npm 在准备 git 依赖时报 `EALLOWSCRIPTS`（例如 `.npmrc` 里设置了 npm 11 的
+`allow-scripts` 白名单），可以改用 Release 里附带的 tar 包，这条路径不经过 git 子安装：
+
+```bash
+npm i https://github.com/yesmola63/koishi-plugin-meting-music/releases/download/v0.1.0-dev.0/koishi-plugin-meting-music-0.1.0-dev.0.tgz
+```
+
 > 仓库里提交了 `lib/` 是为了让 git 安装开箱即用（避免安装时执行构建脚本）。
 > 改动 `src/` 后请执行 `npm run build` 再提交，否则 `lib/` 会与源码不一致。
 
