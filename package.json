@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-meting-music",
-  "version": "0.1.0-dev.0",
-  "description": "音乐点播插件：基于 Meting API 的点歌 / 搜索 / 歌词 / 封面",
+  "version": "0.1.0-dev.1",
+  "description": "🚧 开发中（WIP）| 基于 Meting API 的 Koishi 音乐点歌插件：点歌 / 搜索 / 歌词 / 封面 / 歌单",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -45,8 +45,8 @@
   },
   "koishi": {
     "description": {
-      "zh": "音乐点播：通过 Meting API 点歌、搜索歌曲、查看歌词与封面",
-      "en": "Music request via Meting API"
+      "zh": "🚧 开发中 | 音乐点播：通过 Meting API 点歌、搜索歌曲、查看歌词与封面",
+      "en": "🚧 WIP | Music request via Meting API"
     },
     "service": {
       "required": [

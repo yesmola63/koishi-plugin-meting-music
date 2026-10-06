@@ -18,8 +18,8 @@ interface PlayOptions {
 const USAGE = [
   '🎵 音乐点播',
   '',
-  '点歌 <关键词> —— 搜索并选择播放',
-  '搜索 <关键词> —— 只搜索，不播放',
+  '点歌 <关键词> —— 搜索并列出结果，回复序号播放',
+  '搜索 <关键词> —— 同上，但只有一条结果时也会先列出来',
   '按id点歌 <id> —— 已知歌曲 ID 时直接点播',
   '歌词 <id> —— 查看歌词',
   '点歌单 <id> —— 从歌单里挑一首播放',
@@ -28,6 +28,21 @@ const USAGE = [
   '通用选项：-s <平台> 指定平台，-n <数量> 指定结果数量，-p <页码> 翻页，-d 直接播放第一条，-l 附带完整歌词',
   '（选项写在关键词前面或后面都可以，例如 `.点歌 晴天 -s tencent`）',
 ].join('\n')
+
+/**
+ * 子指令的「空格写法」映射。
+ *
+ * Koishi 不会把 `music search 晴天` 路由到子指令 `music.search`，
+ * 而是匹配到根指令 `music` 并把 `search 晴天` 整个当成 text 参数，
+ * 于是 "search" 混进了关键词。这里在根指令里手动兜一层。
+ */
+const SUBCOMMAND_ALIASES: Record<string, string> = {
+  search: 'search', 搜索: 'search', 搜歌: 'search',
+  id: 'id', 按id点歌: 'id',
+  lyric: 'lyric', 歌词: 'lyric',
+  playlist: 'playlist', 歌单: 'playlist', 点歌单: 'playlist',
+  servers: 'servers', 平台: 'servers', 音乐平台: 'servers',
+}
 
 function toInt(value: unknown): number | undefined {
   const parsed = Number(value)
@@ -127,13 +142,13 @@ export function applyCommands(ctx: Context, config: Config, meting: MetingServic
     return `❌ 操作失败：${esc(error instanceof Error ? error.message : error)}`
   }
 
-  function renderList(header: string, songs: Song[], withPrompt = true): string {
+  function renderList(header: string, songs: Song[]): string {
     const lines = [header]
     songs.forEach((song, index) => {
       const duration = formatDuration(song.duration)
       lines.push(`${index + 1}. ${esc(songTitle(song))}${duration ? ` (${duration})` : ''}`)
     })
-    if (withPrompt) lines.push(`回复序号选择（${config.selectTimeout} 秒内有效），回复 0 取消。`)
+    lines.push(`回复序号选择（${config.selectTimeout} 秒内有效），回复 0 取消。`)
     return lines.join('\n')
   }
 
@@ -208,8 +223,13 @@ export function applyCommands(ctx: Context, config: Config, meting: MetingServic
     await session.send(esc(full ? cleanLyric(lyric) : lyricPreview(lyric, config.lyricPreviewLines)))
   }
 
-  /** 搜索 + 选择 + 播放 的完整流程 */
-  async function requestByKeyword(session: Session, rawKeyword: string, rawOptions: PlayOptions, autoplay: boolean) {
+  /**
+   * 搜索 → 列出结果 → 选择 → 播放。
+   *
+   * `allowAutoPlay` 为 false 时（`搜索` 指令）永远先列结果，即使只有一条，
+   * 保证「总能回复序号」这个体验是一致的。
+   */
+  async function requestByKeyword(session: Session, rawKeyword: string, rawOptions: PlayOptions, allowAutoPlay: boolean) {
     const rescued = rescueOptions(rawOptions, (rawKeyword ?? '').trim())
     const options = rescued.options
     const keyword = rescued.keyword.slice(0, config.maxKeywordLength)
@@ -221,7 +241,7 @@ export function applyCommands(ctx: Context, config: Config, meting: MetingServic
       songs = await meting.search(keyword, {
         server: options.server,
         page: options.page,
-        limit: options.limit ?? (autoplay ? Math.max(config.searchLimit, config.listLimit) : config.searchLimit),
+        limit: options.limit ?? Math.max(config.searchLimit, config.listLimit),
       })
     } catch (error) {
       return renderError(error)
@@ -232,9 +252,12 @@ export function applyCommands(ctx: Context, config: Config, meting: MetingServic
     const list = songs.slice(0, config.listLimit)
     const header = `🔍 找到 ${list.length} 首与「${esc(keyword)}」相关的歌曲：`
 
-    if (!autoplay) return renderList(header, list, false)
-
-    if (options.direct || (list.length === 1 && config.autoPlaySingle)) {
+    const single = list.length === 1 && config.autoPlaySingle
+    if (allowAutoPlay && (options.direct || single)) {
+      // 只有一条时直接播放，顺手说一句，免得用户以为漏了选择环节
+      if (single && !options.direct) {
+        await session.send(`只有一条结果，直接播放：${esc(songTitle(list[0]))}`)
+      }
       await play(session, list[0], options.lyric)
       return
     }
@@ -243,6 +266,57 @@ export function applyCommands(ctx: Context, config: Config, meting: MetingServic
     const picked = await choose(session, list)
     if (!picked) return
     await play(session, picked, options.lyric)
+  }
+
+  /** 按 ID 点歌 */
+  async function playById(session: Session, id: string, options: PlayOptions) {
+    if (!id) return '请提供歌曲 ID。'
+    try {
+      const song = await meting.resolve(id.trim(), options.server)
+      await play(session, song, options.lyric)
+    } catch (error) {
+      return renderError(error)
+    }
+  }
+
+  /** 查看歌词 */
+  async function showLyric(session: Session, id: string, options: PlayOptions) {
+    if (!id) return '请提供歌曲 ID。'
+    const server = options.server ?? config.defaultServer
+    try {
+      const song = await meting.resolve(id.trim(), server)
+      const lyric = await meting.lyric(song)
+      if (!lyric) return `😢 没有找到「${esc(songTitle(song))}」的歌词。`
+      return `🎵 ${esc(songTitle(song))}\n\n${esc(cleanLyric(lyric))}`
+    } catch (error) {
+      return renderError(error)
+    }
+  }
+
+  /** 从歌单里挑一首播放 */
+  async function playPlaylist(session: Session, id: string, options: PlayOptions) {
+    if (!id) return '请提供歌单 ID。'
+    const limit = Math.min(Math.max(options.limit ?? config.listLimit, 1), 50)
+    try {
+      const songs = await meting.playlist(id.trim(), options.server, limit)
+      if (!songs.length) return '😢 这个歌单是空的。'
+      await session.send(renderList(`💿 歌单 ${esc(id)} 共 ${songs.length} 首：`, songs))
+      const picked = await choose(session, songs)
+      if (!picked) return
+      await play(session, picked, options.lyric)
+    } catch (error) {
+      return renderError(error)
+    }
+  }
+
+  function listServers() {
+    return [
+      '🎧 可用平台：',
+      ...SERVERS.map((key) => `- ${key}（${serverLabel(key)}）`),
+      '',
+      `默认平台：${config.defaultServer}`,
+      '用法：点歌 晴天 -s tencent',
+    ].join('\n')
   }
 
   const serverOption = '-s <server:string> 指定平台，例如 netease / tencent'
@@ -264,7 +338,24 @@ export function applyCommands(ctx: Context, config: Config, meting: MetingServic
     .example('点歌 晴天 -s tencent -n 10')
     .action(async ({ session, options }, keyword) => {
       if (!session) return
-      return requestByKeyword(session, keyword, normalizeOptions(options), true)
+      const opts = normalizeOptions(options)
+      const raw = (keyword ?? '').trim()
+
+      // 兼容 `music search 晴天` 这种空格写法
+      const [head, ...rest] = raw.split(/\s+/)
+      const target = SUBCOMMAND_ALIASES[head?.toLowerCase() ?? '']
+      if (target && rest.length) {
+        const arg = rest.join(' ')
+        switch (target) {
+          case 'search': return requestByKeyword(session, arg, opts, false)
+          case 'id': return playById(session, arg, opts)
+          case 'lyric': return showLyric(session, arg, opts)
+          case 'playlist': return playPlaylist(session, arg, opts)
+          case 'servers': return listServers()
+        }
+      }
+
+      return requestByKeyword(session, raw, opts, true)
     })
 
   ctx.command('music.search <keyword:text>', '搜索歌曲')
@@ -273,7 +364,8 @@ export function applyCommands(ctx: Context, config: Config, meting: MetingServic
     .option('server', serverOption)
     .option('limit', limitOption)
     .option('page', pageOption)
-    .usage('只列出搜索结果，不播放。')
+    .option('lyric', lyricOption)
+    .usage('列出搜索结果后回复序号播放；与「点歌」的区别是只有一条结果时也会先列出来。')
     .example('搜索 起风了 -n 10')
     .action(async ({ session, options }, keyword) => {
       if (!session) return
@@ -288,13 +380,7 @@ export function applyCommands(ctx: Context, config: Config, meting: MetingServic
     .example('按id点歌 186016')
     .action(async ({ session, options }, id) => {
       if (!session) return '请提供歌曲 ID。'
-      const opts = normalizeOptions(options)
-      try {
-        const song = await meting.resolve(id.trim(), opts.server)
-        await play(session, song, opts.lyric)
-      } catch (error) {
-        return renderError(error)
-      }
+      return playById(session, id, normalizeOptions(options))
     })
 
   ctx.command('music.lyric <id:string>', '查看歌词')
@@ -304,15 +390,7 @@ export function applyCommands(ctx: Context, config: Config, meting: MetingServic
     .example('歌词 186016')
     .action(async ({ session, options }, id) => {
       if (!session) return '请提供歌曲 ID。'
-      const server = normalizeOptions(options).server ?? config.defaultServer
-      try {
-        const song = await meting.resolve(id.trim(), server)
-        const lyric = await meting.lyric(song)
-        if (!lyric) return `😢 没有找到「${esc(songTitle(song))}」的歌词。`
-        return `🎵 ${esc(songTitle(song))}\n\n${esc(cleanLyric(lyric))}`
-      } catch (error) {
-        return renderError(error)
-      }
+      return showLyric(session, id, normalizeOptions(options))
     })
 
   ctx.command('music.playlist <id:string>', '点歌单')
@@ -325,27 +403,10 @@ export function applyCommands(ctx: Context, config: Config, meting: MetingServic
     .example('点歌单 2619366284')
     .action(async ({ session, options }, id) => {
       if (!session) return '请提供歌单 ID。'
-      const opts = normalizeOptions(options)
-      const limit = Math.min(Math.max(opts.limit ?? config.listLimit, 1), 50)
-      try {
-        const songs = await meting.playlist(id.trim(), opts.server, limit)
-        if (!songs.length) return '😢 这个歌单是空的。'
-        await session.send(renderList(`💿 歌单 ${esc(id)} 共 ${songs.length} 首：`, songs))
-        const picked = await choose(session, songs)
-        if (!picked) return
-        await play(session, picked, opts.lyric)
-      } catch (error) {
-        return renderError(error)
-      }
+      return playPlaylist(session, id, normalizeOptions(options))
     })
 
   ctx.command('music.servers', '查看可用平台')
     .alias('音乐平台')
-    .action(() => [
-      '🎧 可用平台：',
-      ...SERVERS.map((key) => `- ${key}（${serverLabel(key)}）`),
-      '',
-      `默认平台：${config.defaultServer}`,
-      '用法：点歌 晴天 -s tencent',
-    ].join('\n'))
+    .action(() => listServers())
 }

@@ -27,11 +27,21 @@ export type MetingType =
   | 'name' | 'artist' | 'url' | 'pic' | 'cover'
   | 'lrc' | 'playlist' | 'search' | 'song'
 
-/** Meting API 返回的 APlayer 风格歌曲对象 */
+/**
+ * Meting API 返回的歌曲对象。
+ *
+ * 不同实现的字段名并不统一，实测至少两套：
+ * - `{ name, artist, url, cover, lrc }` —— APlayer / MetingJS 风格
+ * - `{ title, author, url, pic, lrc }` —— meting-api 二改版（如 meting.mikus.ink）
+ * 解析时全部兼容，见 `normalizeSong`。
+ */
 export interface MetingSongItem {
   name?: string
+  title?: string
+  songName?: string
   artist?: string
   author?: string
+  singer?: string
   url?: string
   cover?: string
   pic?: string

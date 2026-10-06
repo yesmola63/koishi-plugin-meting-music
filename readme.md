@@ -2,18 +2,25 @@
 
 > 🚧 **开发中（Work in Progress）**
 >
-> 当前版本 `0.1.0-dev.0`，接口与配置项仍可能变动，请勿用于生产环境。
+> 当前版本 `0.1.0-dev.1`，接口与配置项仍可能变动，请勿用于生产环境。
 > 已实现并实测通过：点歌、搜索、按 ID 点歌、歌词、封面、歌单。
 > 计划中的功能见文末「后续可以加的」。
 
 基于 [Meting API](https://github.com/metowolf/Meting) 的 Koishi 音乐点播插件：点歌、搜索、歌词、封面、歌单。
 
-测试用的 API 地址是 `https://api.moeyao.cn/meting/?`，插件里所有平台差异都做了兼容，换别的 Meting 实现也可以直接跑。
+已实测兼容两种 Meting API 实现：
+
+| 实现 | 例 | 搜索返回的字段 |
+| --- | --- | --- |
+| 上游 injahow/meting-api | `https://api.moeyao.cn/meting/?` | **不支持 `type=search`**，插件自动退回内置搜索 |
+| 二改版 / metowolf Meting-API | `https://meting.mikus.ink/api` | `{ title, author, pic, url, lrc }` |
+
+两种字段命名（`name/artist/cover` 与 `title/author/pic`）都已兼容。
 
 ## 功能
 
 - `点歌 <关键词>` —— 搜索后列出结果，回复序号即可播放
-- `搜索 <关键词>` —— 只搜索不播放
+- `搜索 <关键词>` —— 同样列出结果并可回复序号播放，区别是**只有一条结果时也会先列出来**
 - `按id点歌 <id>` —— 已知歌曲 ID 时直接点播
 - `歌词 <id>` —— 查看完整歌词
 - `点歌单 <id>` —— 从歌单里挑一首播放
@@ -23,7 +30,11 @@
 
 ## 安装
 
-本仓库已包含编译产物 `lib/`，可以直接从 GitHub 安装，不需要本地构建：
+```bash
+npm i koishi-plugin-meting-music
+```
+
+也可以直接从 GitHub 安装（仓库已包含编译产物 `lib/`，不需要本地构建）：
 
 ```bash
 npm i github:yesmola63/koishi-plugin-meting-music
@@ -33,7 +44,7 @@ npm i github:yesmola63/koishi-plugin-meting-music
 `allow-scripts` 白名单），可以改用 Release 里附带的 tar 包，这条路径不经过 git 子安装：
 
 ```bash
-npm i https://github.com/yesmola63/koishi-plugin-meting-music/releases/download/v0.1.0-dev.0/koishi-plugin-meting-music-0.1.0-dev.0.tgz
+npm i https://github.com/yesmola63/koishi-plugin-meting-music/releases/download/v0.1.0-dev.1/koishi-plugin-meting-music-0.1.0-dev.1.tgz
 ```
 
 > 仓库里提交了 `lib/` 是为了让 git 安装开箱即用（避免安装时执行构建脚本）。
@@ -88,8 +99,8 @@ plugins:
 ## 指令
 
 ```
-点歌 <关键词>          搜索并选择播放
-搜索 <关键词>          只搜索，不播放
+点歌 <关键词>          搜索并列出结果，回复序号播放
+搜索 <关键词>          同上，但只有一条结果时也会先列出来
 按id点歌 <id>          已知歌曲 ID 时直接点播
 歌词 <id>              查看歌词
 点歌单 <id>            从歌单里挑一首播放
@@ -106,6 +117,14 @@ plugins:
 点歌 -s tencent 晴天 -n 10
 ```
 
+子指令支持点号与空格两种写法，效果一致：
+
+```
+.music.search 稻香
+.music search 稻香
+.搜索 稻香
+```
+
 > 群聊里需要带指令前缀（默认 `/` 或 `.`），私聊不需要。
 
 ## 关于搜索
@@ -119,6 +138,17 @@ plugins:
 3. 两者都不行时给出明确提示，而不是静默失败。
 
 想扩展其它平台，只要往 `src/search.ts` 的 `builtinProviders` 里加一个函数即可。
+
+### 字段名兼容
+
+不同 Meting 实现的 `type=search` 返回字段并不统一，插件两套都认：
+
+| 实现 | 曲名 | 歌手 | 封面 |
+| --- | --- | --- | --- |
+| APlayer / MetingJS | `name` | `artist` | `cover` |
+| 二改版（如 meting.mikus.ink） | `title` | `author` | `pic` |
+
+封面接口本身也有 `type=pic` 与 `type=cover` 两种，`pictureType: auto` 会自动探测。
 
 ## 关于 VIP / 版权曲目
 
@@ -202,6 +232,25 @@ scripts/
   smoke.cjs         服务层冒烟测试（真实 API）
   e2e-command.cjs   指令层端到端测试（Mock 适配器）
 ```
+
+## 更新日志
+
+### 0.1.0-dev.1
+
+修复实测反馈的三个问题：
+
+- **曲名全部显示「未知歌曲」**：`type=search` 的返回字段随实现而异，之前只读 `name`，
+  遇到返回 `title` 的实现（如 `https://meting.mikus.ink/api`）就拿不到曲名。
+  现在 `name/title/songName`、`artist/author/singer`、`cover/pic` 都兼容。
+- **`music search 晴天`（空格写法）把 `search` 当成关键词**：Koishi 不会把
+  `music search X` 路由到子指令 `music.search`，现在根指令里做了兜底分发，
+  点号与空格两种写法结果一致。
+- **`搜索` 指令没有选择环节**：之前 `搜索` 只列结果，无法回复序号。
+  现在同样可以回复序号播放，与 `点歌` 的区别只剩「只有一条结果时也会先列出来」。
+
+### 0.1.0-dev.0
+
+首个开发版：点歌 / 搜索 / 按 ID 点歌 / 歌词 / 封面 / 歌单，播放地址预校验，封面接口自动探测。
 
 ## 后续可以加的
 

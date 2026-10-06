@@ -22,7 +22,13 @@ export declare function extractRef(link?: string): {
     server?: string;
     id?: string;
 };
-/** 把 APlayer 风格的歌曲对象转成本插件的 {@link Song} */
+/**
+ * 把 API 返回的歌曲对象转成本插件的 {@link Song}。
+ *
+ * 字段名兼容两套实现：
+ * - `name` / `artist` / `cover` —— APlayer、MetingJS
+ * - `title` / `author` / `pic` —— meting-api 二改版（实测 meting.mikus.ink 走这套）
+ */
 export declare function normalizeSong(item: MetingSongItem, fallbackServer: string): Song | undefined;
 /**
  * 走 Meting API 的 `type=search`。

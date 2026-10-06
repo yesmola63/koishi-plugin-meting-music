@@ -37,7 +37,21 @@ export function extractRef(link?: string): { server?: string; id?: string } {
   }
 }
 
-/** 把 APlayer 风格的歌曲对象转成本插件的 {@link Song} */
+/** 依次取第一个非空字符串 */
+function pickString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return ''
+}
+
+/**
+ * 把 API 返回的歌曲对象转成本插件的 {@link Song}。
+ *
+ * 字段名兼容两套实现：
+ * - `name` / `artist` / `cover` —— APlayer、MetingJS
+ * - `title` / `author` / `pic` —— meting-api 二改版（实测 meting.mikus.ink 走这套）
+ */
 export function normalizeSong(item: MetingSongItem, fallbackServer: string): Song | undefined {
   if (!item || typeof item !== 'object') return
   const ref = extractRef(item.url) ?? extractRef(item.lrc) ?? extractRef(item.cover ?? item.pic)
@@ -45,8 +59,8 @@ export function normalizeSong(item: MetingSongItem, fallbackServer: string): Son
   return {
     id: ref.id,
     server: ref.server || fallbackServer,
-    name: String(item.name ?? '').trim() || '未知歌曲',
-    artist: String(item.artist ?? item.author ?? '').trim(),
+    name: pickString(item.name, item.title, item.songName) || '未知歌曲',
+    artist: pickString(item.artist, item.author, item.singer),
   }
 }
 
@@ -105,16 +119,20 @@ export const builtinProviders: Record<string, BuiltinProvider> = {
     }
 
     const songs: any[] = data?.result?.songs ?? []
-    return songs.map((item: any): Song => ({
-      id: String(item.id),
-      server: 'netease',
-      name: String(item.name ?? '').trim() || '未知歌曲',
-      artist: (item.artists ?? item.ar ?? [])
-        .map((artist: any) => artist?.name)
-        .filter(Boolean)
-        .join('/'),
-      duration: item.duration ? Math.round(item.duration / 1000) : undefined,
-    }))
+    return songs.map((item: any): Song => {
+      // 旧接口用 duration(毫秒)，新版 cloudsearch 用 dt(毫秒)
+      const ms = item.duration ?? item.dt
+      return {
+        id: String(item.id),
+        server: 'netease',
+        name: pickString(item.name, item.title) || '未知歌曲',
+        artist: (item.artists ?? item.ar ?? [])
+          .map((artist: any) => artist?.name ?? artist)
+          .filter(Boolean)
+          .join('/'),
+        duration: ms ? Math.round(ms / 1000) : undefined,
+      }
+    })
   },
 }
 
